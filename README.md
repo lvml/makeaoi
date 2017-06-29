@@ -74,7 +74,7 @@ and like above, close its window.
 
 Then, type
 
-   makeaoi populate /tmp/sample
+    makeaoi populate /tmp/sample
 	
 and again read the terminal output for useful hints.
 
@@ -82,12 +82,12 @@ This should get you a directory named /tmp/sample, which contains everything req
 
 Transfer this directory to your system B, for example via
 
-   tar -C /tmp -c -f - sample | ssh you@B "tar -C /home/you/ -x -v -f -"
+    tar -C /tmp -c -f - sample | ssh you@B "tar -C /home/you/ -x -v -f -"
 
 Then, on system B, invoke
 
-   /home/you/sample/xeyes
-	/home/you/sample/xrender
+    /home/you/sample/xeyes
+    /home/you/sample/xrender
 	
 You get the idea.
 
@@ -99,7 +99,7 @@ makeaoi automatically creates the minimum set of files required in such a direct
 So for above example, you could run
 
     cd /tmp/
-	 appimagetool --comp xz --no-appstream sample
+    appimagetool --comp xz --no-appstream sample
 
 and then transfer/invoke the resulting AppImage file on system B.
 
