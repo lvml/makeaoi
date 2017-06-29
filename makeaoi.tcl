@@ -6,9 +6,9 @@ proc syntax {} {
 makeaoi - "Make Application Overlay Image"
 written by Lutz Vieweg <lvml@5t9.de>
 
-Invocation:
+Usage:
 
- Use:
+ Start:
   makeaoi trace <aoi-directory> <executable path>
  to run an executable, tracing its accesses of files,
  which are logged into <aoi-directory>/strace.txt.
@@ -20,18 +20,22 @@ Invocation:
  review the list of files that should become part of the
  application image, and save your edited file under the name
   <aoi-directory>/packlist.txt
+ (If you feel lucky, you can skip this step and have makeaoi
+ use the unmodified files.txt list instead - not recommended.)
  
  Then, use:
   makeaoi populate <aoi-directory>
  to copy all files/directories named in <aoi-directory>/packlist.txt
  into a sub-directory of <aoi-directory> that will become the
  "root"-filesystem overlay.
- This also copies statically linked helper-tools and a start script
- into <aoi-directory>, and will create some default icon, in order
- to prepare everything necessary to use the "appimage" tool to
- create an AppImage from the <aoi-directory>
+ This also copies statically linked helper-tools, a start script
+ and soft links to it into <aoi-directory>, it will also create some
+ default icon, in order to prepare everything necessary to use the
+ "appimage" tool to create an AppImage from the <aoi-directory>
+ if desired.
  
- 
+ The executables you traced can than be started by invoking the
+ links inside the self-contained <aoi-directory>.
 }
 }
 
@@ -45,6 +49,43 @@ if {![file isdirectory $aoidir]} {
 
 set tracelog "$aoidir/strace.txt"
 set packlist "$aoidir/packlist.txt"
+
+#########################################################################
+# check pre-requisites
+
+set have_convert 1
+set have_taskset 1
+
+set prereqs {
+	"which"
+	"ln"
+	"patchelf"
+	"taskset"
+	"strace"
+	"cat"
+	"convert"
+	"tar"
+	"grep"
+	"tail"
+	"base64"
+	"gzip"
+}
+
+foreach p $prereqs {
+	if {[catch {exec which $p}]} {
+		puts stderr "Unable to find the tool '$p' on this system"
+		if {$p == "convert"} {
+			set have_convert 0
+			puts stderr "Without 'convert' (from the ImageMagick package), only a constant dummy-icon will be created. Continuing.\n"
+		} elseif {$p == "taskset"} {
+			set have_taskset 0
+			puts stderr "Without 'taskset' (from the util-linux package), tracing will probably use more CPU cores, resulting in an increased rate of un-parseable strace output lines. Continuing.\n"
+		} else {
+			puts stderr "Sorry, makeaoi cannot be used without tool '$p' - aborting."
+			exit 20
+		}
+	}
+}
 
 #########################################################################
 # procedures for the trace sub-command
@@ -184,11 +225,19 @@ if {$subcmd == "trace" } {
 	} else {
 		add_file_or_links $interp
 	}
-
-	puts stderr "running '$exep' on one CPU core under 'strace'...\n"
-
+	
+	if {$have_taskset == 0} {
+		puts stderr "running '$exep' under 'strace'...\n"
+		set taskset_exe "nice"
+		set taskset_par "-0"		
+	} else {
+		puts stderr "running '$exep' on one CPU core under 'strace'...\n"
+		set taskset_exe "taskset"
+		set taskset_par "1"
+	}
+	
 	# run the executable, using strace to see which files are used
-	catch {exec taskset 1 strace -f -o "$tracelog.tmp" -qq \
+	catch {exec $taskset_exe $taskset_par strace -f -o "$tracelog.tmp" -qq \
 		 -e trace=open,execve -v $exep \
 	    >@stdout 2>@stderr
 	}
@@ -257,7 +306,10 @@ if {$subcmd == "trace" } {
 	puts stderr "or use your favourite \$EDITOR to review $output"
 	puts stderr "and save your edited file as '$aoidir/packlist.txt'.\n"		
 	puts stderr "After you created '$aoidir/packlist.txt', you can run"
-	puts stderr "'makeaoi populate $aoidir'.\n"		
+	puts stderr "'makeaoi populate $aoidir'."		
+	puts stderr "(If you feel lucky, you can skip creating packlist.txt"		
+	puts stderr " and run makeaoi populate right away, but it is really"
+	puts stderr " recommended to manually review the list of things to pack.)\n"
 	exit 0
 }
 	
@@ -295,8 +347,31 @@ if {$subcmd == "populate"} {
 	set logoname "$aoidir/${exename}.png"
 	if {![file isfile $logoname]} {
 		puts stderr "creating a default icon in $logoname"
-		exec convert -size 400x100 -pointsize 48 "caption:$exename" $logoname \
-			   >@stdout 2>@stderr
+		
+		if {$have_convert == 1} {
+			exec convert -size 400x100 -pointsize 48 "caption:$exename" $logoname \
+				   >@stdout 2>@stderr
+		} else {
+			# without "convert", we can just provide a constant dummy logo
+			set dummylogo {iVBORw0KGgoAAAANSUhEUgAAAZAAAADICAIAAABJdyC1AAADc0lEQVR42u3a0W6DIABAUV36/7/M
+HpoYI6CCaJGc87TN1khbrmg3hxAmgDf48xIAggUgWIBgAQgWgGABggUgWACCBQgWgGABCBYgWACC
+BSBYgGABCBaAYAGCBSBYAIIFCBaAYAEIFiBYAIIFIFiAYAEIFiBYAIIFIFiAYAEIFoBgAYIFIFgA
+ggUIFoBgAQgWIFgAggUgWIBgAQgWgGABggUgWACCBQgWgGABCBYgWACCBSBYgGABCBYgWACCBSBY
+gGABCBaAYAGCBSBYAIIFCBaAYAEIFiBYAIIFIFiAYAEIFoBgAYIFIFgAggUIFoBgAQgWIFgAggUg
+WIBgAQgWIFgAggUgWIBgAQgWgGABggUgWACCBQgWQD8+g41nnufl5xBCk71d3w8wSLDWibnYmuSu
+mh/q4bE1HFHnJwYpxwrr6nzocxaZ4TBOsDYz+Tu953l+7wwfb0QgWNnZnpvhmwuu79b1H5ef403J
+Xa3/uLMOWvaz2f+VER0ewPJrPIrcuEqfkhty3ZLw8NXefyPa3oJkPP1+S5icQvHtof37Vputd9/k
+uulatXTUdU+5fs2be7WTm54/QqywfjztN2uW5KJgs5Sovihbzv8/OfOvRxGvwpKDOvmU77g2e6ge
+abyTM5uSK0GXz7xphXXmCuXwA71+wDC3w0oH/sDwd96dw03xEeoUg6ywKq4aXGicXDzuL1RBsLqr
+GyBYzXLT9q6KgMaLLBdl9KzTe1jxzEne9SgKQe5h8f8rPDOihw/g7t5Nme9kDzfB+1ZY59dTpbN6
+5/Hr/41qkp7SEdUdwK2LrIsd2RmIK3SGXWGFEJLfcyXnUm6CXflKse4BpSNquP8O37L16jjeZHlF
+zRnR5wZXalhhoVbQ2MdLgLtLWGHxPpZX9H5y9RkFrLAABAsQLADBAhAsQLAABAtAsADBAhAsAMEC
+BAtAsAAECxAsAMECECxAsAAEC0CwAMECECwAwQIEC0CwAAQLECwAwQIEC0CwAAQLECwAwQIQLECw
+AAQLQLAAwQIQLADBAgQLQLAABAsQLADBAhAsQLAABAtAsADBAhAsAMECBAtAsAAECxAsAMECBAtA
+sAAECxAsAMECECxAsAAEC0CwAMECECwAwQIEC0CwAAQLECwAwQIQLECwAAQLQLAAwQIQLADBAgQL
+QLAApmmapn9zUWO57l09VwAAAABJRU5ErkJggg==}
+			exec base64 -d >$logoname <<$dummylogo 2>@stderr			
+		}
 	}
 
 	if {![file isfile $aoidir/AppRun]} {
@@ -326,7 +401,7 @@ if {$subcmd == "populate"} {
 		puts stderr "store your revised list as 'packlist.txt'\n"
 	}
 	
-	puts stderr "\ncopying all files/directories named in $apacklist to $rdir\n"
+	puts stderr "\nUsing tar to copy all files/directories named in $apacklist to $rdir\n"
 	# check for --verbatim-files-from 
 	exec tar -c --files-from=$apacklist -f - \
 		    | tar -C $rdir -x -v -f - >@stdout 2>@stderr
@@ -355,14 +430,22 @@ if {$subcmd == "populate"} {
 	}
 
 
-	puts stderr "\n\nYou may now remove these no longer required files:\n"
+	puts stderr "\n\nIf you do not plan further runs of 'makeaoi trace', you may now remove"
 	puts stderr "rm -f \"$aoidir/strace.txt\" \"$aoidir/files.txt\"\n"
 	puts stderr "You can also delete $aoidir/packlist.txt, but you may want "
 	puts stderr " to retain it in there in case you want to re-run $argv0 populate $aoidir"
-	puts stderr " after testing on your target system and modifying $aoidir/packlist.txt"
+	puts stderr " after testing on your target system and modifying $aoidir/packlist.txt\n"
 	
-	puts stderr "\nYou could then also run"
-	puts stderr "cd [file dirname $aoidir] ; appimagetool --comp xz --no-appstream [file tail $aoidir]"
+	puts stderr "You now have a directory ($aoidir) that should contain everything required"
+	puts stderr " to run your traced executables on another system."
+	puts stderr "Transfer the directory to that system (using tar, rsync, or whatever other"
+	puts stderr " tool that is capable of retaining soft-links), then run any of your traced"
+	puts stderr " executables there by invoking the softlink from the executable name to AppRun"
+	puts stderr " in the directory.\n"
+	
+	puts stderr "You can also use other tools to turn the directory into a self-contained"
+	puts stderr " executable, such as 'AppImage', which you could create this way:"
+	puts stderr " cd [file dirname $aoidir] ; appimagetool --comp xz --no-appstream [file tail $aoidir]"
 	
 	puts stderr ""
 	exit 0
