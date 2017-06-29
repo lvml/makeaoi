@@ -1,0 +1,73 @@
+#!/bin/bash
+
+THISDIR=$(dirname "$0")
+CALLNAME=$(basename "$0")
+EXEPATH=$(readlink "$THISDIR/exe_$CALLNAME")
+
+SUPPATH="$THISDIR/aoi_support_binaries"
+
+# we create some temporary directory where to mount our unionfs
+UNIONPATH=$(mktemp -d)
+
+# will later be assigned with actual values, defaults for finish() trap handler
+UNIONFS_PID=
+RETVAL=20
+
+# define a clean-up handler we will trap into if this script
+# is aborted - or called after a graceful end of the application
+function finish () {
+
+	# unmount the unionfs by killing the user process (this is the only
+	# method of doing so allowed to non-privileged users, without SUID executables)
+	kill -s SIGTERM $UNIONFS_PID >/dev/null 2>&1
+	
+	# un-trap to avoid dead-locks
+	trap - SIGINT
+	trap - SIGTERM
+	
+	# wait for unionfs to terminate
+	wait $UNIONFS_PID
+	
+	# remove temporary mount directory
+	rmdir "$UNIONPATH"
+	
+	exit $RETVAL
+}
+
+trap finish SIGINT
+trap finish SIGTERM
+
+# mount the union filesystem, overlay "on top" of the root directory
+$SUPPATH/unionfs_static -f -o dev,relaxed_permissions "$THISDIR/root_overlay=RW:/=RW" "$UNIONPATH" &
+UNIONFS_PID=$!
+
+# wait for the unionfs command to finish mounting the filesystem
+while ! test -e "$UNIONPATH/aoi_supp/mount_check" ; do
+	sleep 0.1
+	if ! test -e "/proc/$UNIONFS_PID" ; then
+		echo "The $SUPPATH/unionfs_static process died, which probably means that"
+		echo "there are problems with mounting user space filesystems (FUSE) in general"
+		echo "on your system. (Or have you started $0 using 'strace'? - That won't work.)"
+		echo "Alas, you will need to debug this on your own - try mounting"
+		echo "some FUSE filesystem manually to see what's going wrong."
+		RETVAL=20
+		finish
+	fi
+done
+
+# We want ld-linux to search some paths for shared libraries that might be
+# searched on the source system by default, but not on the target machine.
+export LD_LIBRARY_PATH=/lib64:/usr/lib64:/usr/lib/gvfs:/usr/lib
+
+# We remember our current working directory for the /aoi_supp/trampoline
+# script to use
+export AOI_PWD=$PWD
+
+# use "unshare -r" to establish a user PID namespace, as a prerequisite
+# to then "chroot" into our union filesystem, finally invoking the
+# application executable there
+$SUPPATH/unshare_static -r "$SUPPATH/chroot_static" "$UNIONPATH" /aoi_supp/trampoline "$EXEPATH" "$@"
+RETVAL=$?
+
+# cleanup 
+finish

@@ -1,0 +1,13 @@
+#!/bin/bash
+
+echo "#!/usr/bin/tclsh"
+echo "set xxx {"
+
+tar -C "$1" -c --owner=0 --group=0 -v -f - . | gzip -9 -c | base64 
+
+echo "}"
+
+echo ""
+echo "# sample use:"
+
+echo "exec base64 -d | tar -t -v -z -f - <<\$xxx >@stdout 2>@stderr"
