@@ -1,5 +1,16 @@
 #!/bin/bash
 
+# edit here for running without user namespace support:
+CHROOT_USER=
+CHROOT_GROUP=
+# for running without user namespace support, you need to
+# run AppRun as root, providing the user name and group name in the
+# two variables defined above. 
+# E.g.:
+# CHROOT_USER=johndoe
+# CHROOT_GROUP=johndoe
+
+
 # This "AppRun" script comes as part of the "makeaoi" tool - see
 # https://github.com/lvml/makeaoi for more details.
 # 
@@ -19,7 +30,16 @@ EXEPATH=$(readlink "$THISDIR/exe_$CALLNAME")
 SUPPATH="$THISDIR/aoi_support_binaries"
 
 # we create some temporary directory where to mount our unionfs
-UNIONPATH=$(mktemp -d)
+if test "x$CHROOT_USER" == "x" ; then
+	UNIONPATH=$(mktemp -d)
+else
+	if test "x$(whoami)" != "xroot" ; then
+		echo "If you configure a certain user/group at the start of the AppRun script,"
+		echo "you will need to run AppRun as root."
+		exit 20
+	fi 
+	UNIONPATH=$(runuser -u $CHROOT_USER -- mktemp -d)
+fi
 
 # will later be assigned with actual values, defaults for finish() trap handler
 UNIONFS_PID=
@@ -49,9 +69,15 @@ function finish () {
 trap finish SIGINT
 trap finish SIGTERM
 
-# mount the union filesystem, overlay "on top" of the root directory
-$SUPPATH/unionfs_static -f -o dev,relaxed_permissions "$THISDIR/root_overlay=RW:/=RW" "$UNIONPATH" &
-UNIONFS_PID=$!
+if test "x$CHROOT_USER" == "x" ; then
+	# mount the union filesystem, overlay "on top" of the root directory
+	$SUPPATH/unionfs_static -f -o dev,relaxed_permissions "$THISDIR/root_overlay=RW:/=RW" "$UNIONPATH" &
+	UNIONFS_PID=$!
+else
+	# mount the union filesystem, overlay "on top" of the root directory
+	runuser -u $CHROOT_USER -- $SUPPATH/unionfs_static -f -o dev,allow_root "$THISDIR/root_overlay=RW:/=RW" "$UNIONPATH" &
+	UNIONFS_PID=$!
+fi
 
 # wait for the unionfs command to finish mounting the filesystem
 while ! test -e "$UNIONPATH/aoi_supp/mount_check" ; do
@@ -67,6 +93,21 @@ while ! test -e "$UNIONPATH/aoi_supp/mount_check" ; do
 	fi
 done
 
+
+if test "x$CHROOT_USER" == "x" ; then 
+	# check whether user namespaces for PIDs are supported
+	if test "x$($SUPPATH/unshare_static -r whoami)" != "xroot" ; then
+		echo "Your system does not allow to use 'unshare -r' to create a new namespace for PIDs -"
+		echo "this probably means your Linux kernel was compiled with .config option"
+		echo "CONFIG_USER_NS not set."
+		echo "If you want to use this Application Overlay Image anyway, please edit"
+		echo "the AppRun shell script, edit the lines below the comment 'edit here"
+		echo "for running without user namespace support' - requires root privileges." 
+		RETVAL=20
+		finish
+	fi
+fi
+
 # We want ld-linux to search some paths for shared libraries that might be
 # searched on the source system by default, but not on the target machine.
 export LD_LIBRARY_PATH=/lib64:/usr/lib64:/usr/lib/gvfs:/usr/lib
@@ -75,11 +116,17 @@ export LD_LIBRARY_PATH=/lib64:/usr/lib64:/usr/lib/gvfs:/usr/lib
 # script to use
 export AOI_PWD=$PWD
 
-# use "unshare -r" to establish a user PID namespace, as a prerequisite
-# to then "chroot" into our union filesystem, finally invoking the
-# application executable there
-$SUPPATH/unshare_static -r "$SUPPATH/chroot_static" "$UNIONPATH" /aoi_supp/trampoline "$EXEPATH" "$@"
-RETVAL=$?
+if test "x$CHROOT_USER" == "x" ; then
+	# use "unshare -r" to establish a user PID namespace, as a prerequisite
+	# to then "chroot" into our union filesystem, finally invoking the
+	# application executable there
+	$SUPPATH/unshare_static -r "$SUPPATH/chroot_static" "$UNIONPATH" /aoi_supp/trampoline "$EXEPATH" "$@"
+	RETVAL=$?
+else
+	# if user namespace support is unavailable, we might be called as root,
+	# with user id and group id given in $CHROOT_* variables
+	chroot --userspec=$CHROOT_USER:$CHROOT_GROUP "$UNIONPATH" /aoi_supp/trampoline "$EXEPATH" "$@"
+fi
 
 # cleanup 
 finish
