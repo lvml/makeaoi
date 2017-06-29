@@ -1,13 +1,9 @@
 #!/bin/bash
 
-echo "#!/usr/bin/tclsh"
-echo "set xxx {"
+cat <<EOBAT
+# Just some random string to allow for the "grep -A 9999999 $argv0" magic above:
+# pW963GuJnrxAdWbBD2B
+EOBAT
 
 tar -C "$1" -c --owner=0 --group=0 -v -f - . | gzip -9 -c | base64 
 
-echo "}"
-
-echo ""
-echo "# sample use:"
-
-echo "exec base64 -d | tar -t -v -z -f - <<\$xxx >@stdout 2>@stderr"
