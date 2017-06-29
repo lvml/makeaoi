@@ -304,11 +304,11 @@ if {$subcmd == "populate"} {
 		
 		puts stderr "using tar to copy support files into $aoidir/"
 		if {[file isdirectory $asf]} {
-			puts stderr "(Using support files from $asf, not from the base64 encoded data embedded into [info script])"
+			puts stderr "(Using support files from $asf, not from base64 encoded data embedded into [info script])"
 			exec tar -C $asf -c -f - . \
 				   | tar -C $aoidir -x -v -f - >@stdout 2>@stderr
 		} else {	
-			puts stderr "(Using support files from base64 encoded data embedded at the end of [info script])"
+			puts stderr "(Using support files from base64 encoded data hopefully embedded at the end of [info script])"
 			
 			# we "grep" the base64 encoded data right from the magic-marked end of this script:
 			set asfdata [exec grep -A 9999999 "p\W963GuJnrxAdWbBD2B" [info script] | tail -n +2 2>@stderr]

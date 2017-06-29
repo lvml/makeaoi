@@ -1,5 +1,17 @@
 #!/bin/bash
 
+# This "AppRun" script comes as part of the "makeaoi" tool - see
+# https://github.com/lvml/makeaoi for more details.
+# 
+# Unlike the "makeaoi.tcl" code itself, which is licensed under GPL v3,
+# this "AppRun" script is licensed under LGPL v3. 
+#
+# (C) 2017 Lutz Vieweg
+# License: LGPL v3
+# GNU LESSER GENERAL PUBLIC LICENSE
+# Version 3, 29 June 2007
+# https://www.gnu.org/copyleft/lesser.html#content
+
 THISDIR=$(dirname "$0")
 CALLNAME=$(basename "$0")
 EXEPATH=$(readlink "$THISDIR/exe_$CALLNAME")
