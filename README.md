@@ -23,18 +23,8 @@ To give you an example: I initially implemented "makeaoi" because I wanted to ru
 
 On system A, where you want to prepare the directory, a number of common Unix tools are required, which should be provided by most distributions anyway:
 
-* "which"
-* "ln"
-* "patchelf"
-* "taskset"  (optional but recommended)
-* "strace"
-* "cat"
-* "convert"  (optional)
-* "tar"
-* "grep"
-* "tail"
-* "base64"
-* "gzip"
+* "tclsh", "strace", "cat", "which", "ln", "tar", "grep", "tail", "base64", "gzip", "patchelf" (optional), "taskset" (optional but recommended), "convert" (optional)
+
 
 On system B, where you want to run the applications from the prepared directory, you will need at least:
 
@@ -91,6 +81,36 @@ Then, on system B, invoke
 	
 You get the idea.
 
+### Passing command line options to your application executables
+
+When using "makeaoi trace", add any command line parameters your executable requires to do its job:
+
+    makeaoi trace _aoi-directory_ _executable-name_ _argument1_ _argument2_ ... _argumentN_
+
+When later invoking an executable via its link in the _aoi-directory_, you can of course also pass any required command line arguments.
+
+### How to ensure proper tracing
+
+"makeaoi trace" only takes notice of a file used by applications when it is actually accessed via the "open" or "execve" system calls.
+
+So make sure that your trace runs do represent proper usages of the application in the same kind of work-flow that you want to do on the target system.
+
+For applications that require user interaction, make sure you enter all the relevant menus / dialogs / functions. 
+
+Of course, your application might come with lots of data files which are not all opened in every run, and that usually is best adressed by editing the lines in _aoi-directory_/packlist.txt to contain application-specific directories as a whole, not just individual files from it.
+
+For example: If you trace some application named "supertool", and you find lines like
+
+    /usr/share/supertool/subdir/somefile1
+    /usr/share/supertool/subdir/somefile2
+    /usr/share/supertool/subdir/somefile2
+
+in _aoi-directory_/files.txt, you should replace those lines by
+
+    /usr/share/supertool
+
+in _aoi-directory_/packlist.txt.
+
 ### Preparing AppImages from makeaoi-generated directories
 
 AppImage is a format for packaging a directory with everything needed for an application into a self-extracting executable.
@@ -102,6 +122,24 @@ So for above example, you could run
     appimagetool --comp xz --no-appstream sample
 
 and then transfer/invoke the resulting AppImage file on system B.
+
+### Automatic file name filters
+
+Notice that makeaoi contains some pre-defined automatic filter rules for filenames to include in _aoi-directory_/files.txt.
+
+You can find those filter rules in the script following the lines
+
+    set filters(exclude) {
+
+    set filters(nodirectories) {
+    
+	 set filters(generalizers) {
+
+The "filters(exclude)" are meant to automatically avoid packing files from /home/, /tmp/ and other paths that are usually not part of an application.
+
+The "filters(nodirectories)" are meant to avoid including certain directories as a whole (rather than individual files under them), which are routinely scanned by certain libraries (e.g., whole system font directories).
+
+The "filters(generalizers)" are kind of the opposite of "filters(nodirectories)": These are meant to include certain directories as a whole (instead of just individual opened files under them), this is useful for cases like "/usr/share/zoneinfo" - where you may not know what time zones will be used on the target system.
 
 
 ## Caveats

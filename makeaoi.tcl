@@ -1,5 +1,13 @@
 #!/usr/bin/tclsh
- 
+
+# This script comes as part of the "makeaoi" tool - see
+# https://github.com/lvml/makeaoi for more details.
+# 
+# This script (except for an optionally appended, base64-encoded
+#  tar.gz archive with support files at the end) is licensed under
+#  the GNU Public License Version 3.
+# (C) 2017 Lutz Vieweg
+
 proc syntax {} {
 	
 	puts stderr {
@@ -9,7 +17,7 @@ written by Lutz Vieweg <lvml@5t9.de>
 Usage:
 
  Start:
-  makeaoi trace <aoi-directory> <executable path>
+  makeaoi trace <aoi-directory> <executable path> [arg1 arg2 ...]
  to run an executable, tracing its accesses of files,
  which are logged into <aoi-directory>/strace.txt.
  Can be called multiple times to enhance coverage of
@@ -55,6 +63,7 @@ set packlist "$aoidir/packlist.txt"
 
 set have_convert 1
 set have_taskset 1
+set have_patchelf 1
 
 set prereqs {
 	"which"
@@ -80,12 +89,55 @@ foreach p $prereqs {
 		} elseif {$p == "taskset"} {
 			set have_taskset 0
 			puts stderr "Without 'taskset' (from the util-linux package), tracing will probably use more CPU cores, resulting in an increased rate of un-parseable strace output lines. Continuing.\n"
+		} elseif {$p == "patchelf"} {
+			set have_patchelf 0
+			puts stderr "Without 'patchelf' (from https://nixos.org/patchelf.html), makeaoi will need to guess ELF interpreter names using 'ldd', a method less robust. Continuing."
 		} else {
 			puts stderr "Sorry, makeaoi cannot be used without tool '$p' - aborting."
 			exit 20
 		}
 	}
 }
+
+#########################################################################
+
+proc exec_var_args { args } {
+
+	set s ""
+	foreach a $args {
+		append s $a
+	}
+}
+
+#########################################################################
+
+proc get_ELF_interpreter { exep } {
+	global have_patchelf
+	
+	set interp ""
+	
+	if {$have_patchelf == 1} {
+	
+		catch {set interp [exec patchelf --print-interpreter $exep 2>@stderr]}
+		if {$interp == ""} {
+			puts stderr "'$exep' does not seem to be an ELF executable, according to patchelf --print-interpreter. Continuing."
+		}
+	
+	} else {
+		
+		set x ""
+		catch {set x [exec ldd $exep | grep ld-linux 2>@stderr]}
+		
+		regexp {([^ 	]+)} $x range interp
+		
+		if {$interp == ""} {
+			puts stderr "'$exep' does not seem to be an ELF executable, according to ldd output. Continuing."
+		}
+	}	
+	
+	return $interp
+}
+
 
 #########################################################################
 # procedures for the trace sub-command
@@ -197,14 +249,14 @@ if {$subcmd == "trace" } {
 	# create a link from the executable name to the "AppRun" script,
 	# such that users can call multiple executables via this "AppRun" script
 	set scriptlinkname "$aoidir/[file tail $exe]"
-	if {![file exists $scriptlinkname]} {
+	if {[catch {file type $scriptlinkname}]} {
 		exec ln -s "AppRun" $scriptlinkname  >@stdout 2>@stderr
 	}
 	# also create a link that is used to store the path of the actual
 	# executable inside the overlay root filesystem - this link will
 	# point to an existing file after the unionfs has been mounted
 	set exelinkname "$aoidir/exe_[file tail $exe]"
-	if {![file exists $exelinkname]} {
+	if {[catch {file type $exelinkname}]} {
 		exec ln -s $exep $exelinkname >@stdout 2>@stderr
 	}
 	# If "AppRun" is later called directly, not via one of the symbolic
@@ -212,36 +264,40 @@ if {$subcmd == "trace" } {
 	# the directory), assume that the very first executable that was traced
 	# is the one to be started. We remember its path in a default softlink.
 	set deflinkname "$aoidir/exe_AppRun"
-	if {![file exists $deflinkname]} {
+	if {[catch {file type $deflinkname}]} {
 		exec ln -s $exep $deflinkname  >@stdout 2>@stderr
 	}
 
 
 	# ELF-executables need an "interpreter" to run, add this also to files.txt
-	set interp ""
-	catch {set interp [exec patchelf --print-interpreter $exep 2>@stderr]}
-	if {$interp == ""} {
-		puts stderr "'$exep' does not seem to be an ELF executable - not adding interpreter file"
-	} else {
+	set interp [get_ELF_interpreter $exep]
+	if {$interp != ""} {
 		add_file_or_links $interp
 	}
+
+	set exe_args {}
+	lappend exe_args "exec" 
 	
 	if {$have_taskset == 0} {
-		puts stderr "running '$exep' under 'strace'...\n"
-		set taskset_exe "nice"
-		set taskset_par "-0"		
+		puts stderr "running '$exep' under 'strace'..."
 	} else {
-		puts stderr "running '$exep' on one CPU core under 'strace'...\n"
-		set taskset_exe "taskset"
-		set taskset_par "1"
+		puts stderr "running '$exep' on one CPU core under 'strace'..."
+		lappend exe_args "taskset" "1"
 	}
+	puts stderr "If '$exep' requires user interaction, please make sure that you"
+	puts stderr "go through all relevant workflows (menus, dialogs etc.) before"
+	puts stderr "you gracefully quit the application.\n"
+	
+	lappend exe_args "strace" "-f" "-o" "$tracelog.tmp" "-qq" "-e" "trace=open,execve" "-v"
+	lappend exe_args $exep
+	for {set i 3} {$i < [llength $argv]} {incr i} {
+		lappend exe_args [lindex $argv $i]
+	}
+	lappend exe_args ">@stdout" "2>@stderr"
 	
 	# run the executable, using strace to see which files are used
-	catch {exec $taskset_exe $taskset_par strace -f -o "$tracelog.tmp" -qq \
-		 -e trace=open,execve -v $exep \
-	    >@stdout 2>@stderr
-	}
-
+	catch {eval "$exe_args >@stdout 2>@stderr"}
+	
 	puts stderr "\nfinished running '$exep'"
 	puts stderr "parsing strace output...\n"
 
