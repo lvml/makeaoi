@@ -111,18 +111,34 @@ proc exec_var_args { args } {
 
 #########################################################################
 
-proc get_ELF_interpreter { exep } {
+proc get_interpreter { exep } {
 	global have_patchelf
 	
 	set interp ""
+	
+	set in [open $exep "r"]
+	fconfigure $in -buffering none
+	set m [read $in 2]
+	if {$m == "#!"} {
+		# looks like the executable is a script - so take its interpreter from the first line
+		set l [gets $in]
+		set interp [lindex $l 0]
+		
+		puts stderr "'$exep' seems to be interpreted by '$interp'"
+		
+		close $in
+		return $interp
+	}
+	close $in
 	
 	if {$have_patchelf == 1} {
 	
 		catch {set interp [exec patchelf --print-interpreter $exep 2>@stderr]}
 		if {$interp == ""} {
 			puts stderr "'$exep' does not seem to be an ELF executable, according to patchelf --print-interpreter. Continuing."
-		}
-	
+		} else {
+			puts stderr "'$exep' is interpreted by '$interp' (according to patchelf)"
+		}	
 	} else {
 		
 		set x ""
@@ -132,8 +148,10 @@ proc get_ELF_interpreter { exep } {
 		
 		if {$interp == ""} {
 			puts stderr "'$exep' does not seem to be an ELF executable, according to ldd output. Continuing."
-		}
-	}	
+		} else {
+			puts stderr "'$exep' is interpreted by '$interp' (according to ldd)"
+		}	
+	}
 	
 	return $interp
 }
@@ -269,8 +287,8 @@ if {$subcmd == "trace" } {
 	}
 
 
-	# ELF-executables need an "interpreter" to run, add this also to files.txt
-	set interp [get_ELF_interpreter $exep]
+	# Add ELF- or script interpreter, if any, and add this to files.txt
+	set interp [get_interpreter $exep]
 	if {$interp != ""} {
 		add_file_or_links $interp
 	}
@@ -323,6 +341,12 @@ if {$subcmd == "trace" } {
 			}
 			# execve does not return - let's pretend it does succeed:
 			set result 0
+			
+			# Also add ELF- or script interpreter, to files.txt
+			set interp [get_interpreter $fname]
+			if {$interp != ""} {
+				add_file_or_links $interp
+			}
 		} 
 
 		if {$result < 0} {
