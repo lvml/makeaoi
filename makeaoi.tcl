@@ -67,7 +67,6 @@ set packlist "$aoidir/packlist.txt"
 #########################################################################
 # check pre-requisites
 
-set have_convert 1
 set have_taskset 1
 set have_patchelf 1
 
@@ -78,7 +77,6 @@ set prereqs {
 	"taskset"
 	"strace"
 	"cat"
-	"convert"
 	"tar"
 	"grep"
 	"tail"
@@ -89,10 +87,7 @@ set prereqs {
 foreach p $prereqs {
 	if {[catch {exec which $p}]} {
 		puts stderr "Unable to find the tool '$p' on this system"
-		if {$p == "convert"} {
-			set have_convert 0
-			puts stderr "Without 'convert' (from the ImageMagick package), only a constant dummy-icon will be created. Continuing.\n"
-		} elseif {$p == "taskset"} {
+		if {$p == "taskset"} {
 			set have_taskset 0
 			puts stderr "Without 'taskset' (from the util-linux package), tracing will probably use more CPU cores, resulting in an increased rate of un-parseable strace output lines. Continuing.\n"
 		} elseif {$p == "patchelf"} {
@@ -266,8 +261,8 @@ proc add_file_or_links { fname } {
 if {$subcmd == "trace" } {
 	set exe [lindex $argv 2]
 	
-	if {![file executable $exe]} {
-		puts stderr "'$exe' is not the name of an executable file.\n"
+	if {$exe == ""} {
+		puts stderr "makeaoi trace needs to be given the name of an executable to trace.\n"
 		syntax
 		exit 20
 	}
@@ -438,14 +433,10 @@ if {$subcmd == "populate"} {
 	# should that later be used
 	set logoname "$aoidir/${exename}.png"
 	if {![file isfile $logoname]} {
-		puts stderr "creating a default icon in $logoname"
+		puts stderr "saving a dummy default icon to $logoname"
 		
-		if {$have_convert == 1} {
-			exec convert -size 400x100 -pointsize 48 "caption:$exename" $logoname \
-				   >@stdout 2>@stderr
-		} else {
-			# without "convert", we can just provide a constant dummy logo
-			set dummylogo {iVBORw0KGgoAAAANSUhEUgAAAZAAAADICAIAAABJdyC1AAADc0lEQVR42u3a0W6DIABAUV36/7/M
+		# just provide a constant dummy logo
+		set dummylogo {iVBORw0KGgoAAAANSUhEUgAAAZAAAADICAIAAABJdyC1AAADc0lEQVR42u3a0W6DIABAUV36/7/M
 HpoYI6CCaJGc87TN1khbrmg3hxAmgDf48xIAggUgWIBgAQgWgGABggUgWACCBQgWgGABCBYgWACC
 BSBYgGABCBaAYAGCBSBYAIIFCBaAYAEIFiBYAIIFIFiAYAEIFiBYAIIFIFiAYAEIFoBgAYIFIFgA
 ggUIFoBgAQgWIFgAggUgWIBgAQgWgGABggUgWACCBQgWgGABCBYgWACCBSBYgGABCBYgWACCBSBY
@@ -462,8 +453,7 @@ BAtAsAAECxAsAMECECxAsAAEC0CwAMECECwAwQIEC0CwAAQLECwAwQIEC0CwAAQLECwAwQIQLECw
 AAQLQLAAwQIQLADBAgQLQLAABAsQLADBAhAsQLAABAtAsADBAhAsAMECBAtAsAAECxAsAMECBAtA
 sAAECxAsAMECECxAsAAEC0CwAMECECwAwQIEC0CwAAQLECwAwQIQLECwAAQLQLAAwQIQLADBAgQL
 QLAApmmapn9zUWO57l09VwAAAABJRU5ErkJggg==}
-			exec base64 -d >$logoname <<$dummylogo 2>@stderr			
-		}
+		exec base64 -d >$logoname <<$dummylogo 2>@stderr			
 	}
 
 	if {![file isfile $aoidir/AppRun]} {
