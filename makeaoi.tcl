@@ -17,7 +17,7 @@ written by Lutz Vieweg <lvml@5t9.de>
 Usage:
 
  Start:
-  makeaoi trace <aoi-directory> <executable path> [arg1 arg2 ...]
+  makeaoi trace <aoi-directory> <executable> [arg1 arg2 ...]
  to run an executable, tracing its accesses of files,
  which are logged into <aoi-directory>/strace.txt.
  Can be called multiple times to enhance coverage of
@@ -49,6 +49,12 @@ Usage:
 
 set subcmd [lindex $argv 0]
 set aoidir [lindex $argv 1]
+
+if {$aoidir == ""} {
+	puts stderr "You need to specify the name of the directory to store your application files in.\n"
+	syntax
+	exit 20
+}
 
 if {![file isdirectory $aoidir]} {
 	# try to make it
@@ -259,7 +265,13 @@ proc add_file_or_links { fname } {
 
 if {$subcmd == "trace" } {
 	set exe [lindex $argv 2]
-
+	
+	if {![file executable $exe]} {
+		puts stderr "'$exe' is not the name of an executable file.\n"
+		syntax
+		exit 20
+	}
+	
 	# add the supplied executable to files.txt 
 	set exep [exec which $exe 2>@stderr]
 	add_file_or_links $exep
@@ -528,6 +540,11 @@ QLAApmmapn9zUWO57l09VwAAAABJRU5ErkJggg==}
 	puts stderr " cd [file dirname $aoidir] ; appimagetool --comp xz --no-appstream [file tail $aoidir]"
 	
 	puts stderr ""
+	exit 0
+}
+
+if {$subcmd == "-h" || $subcmd == "help" || $subcmd == "-help" || $subcmd == "--help"} {
+	syntax
 	exit 0
 }
 
