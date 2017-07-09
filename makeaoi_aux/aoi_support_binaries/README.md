@@ -1,7 +1,7 @@
 # About this directory
 
 This directory contains statically linked binaries compiled
-from (non-modified source code of) the following software:
+from the source code of the following software:
 
 1. chroot:
     License GPL v3
@@ -13,7 +13,12 @@ from (non-modified source code of) the following software:
 
 3. unionfs-fuse:
     License BSD-3-clause
+   The original upstream software you can find under:
     https://github.com/rpodgorny/unionfs-fuse
+	I had to apply some changes, which are currenty available from
+	 https://github.com/lvml/unionfs-fuse/tree/fake_dev
+   (This is sort of work-in-progress, I will try later to contribute
+	 those changes to the upstream project.)
 
 4. unshare:
     License GPL v2

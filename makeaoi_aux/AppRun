@@ -71,11 +71,11 @@ trap finish SIGTERM
 
 if test "x$CHROOT_USER" == "x" ; then
 	# mount the union filesystem, overlay "on top" of the root directory
-	$SUPPATH/unionfs_static -f -o dev,relaxed_permissions "$THISDIR/root_overlay=RW:/=RW" "$UNIONPATH" &
+	$SUPPATH/unionfs_static -f -o fake_devices,relaxed_permissions "$THISDIR/root_overlay=RW:/=RW" "$UNIONPATH" &
 	UNIONFS_PID=$!
 else
 	# mount the union filesystem, overlay "on top" of the root directory
-	runuser -u $CHROOT_USER -- $SUPPATH/unionfs_static -f -o dev,allow_root "$THISDIR/root_overlay=RW:/=RW" "$UNIONPATH" &
+	runuser -u $CHROOT_USER -- $SUPPATH/unionfs_static -f -o fake_devices,allow_root "$THISDIR/root_overlay=RW:/=RW" "$UNIONPATH" &
 	UNIONFS_PID=$!
 fi
 
