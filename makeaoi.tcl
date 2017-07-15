@@ -313,7 +313,7 @@ if {$subcmd == "trace" } {
 	puts stderr "go through all relevant workflows (menus, dialogs etc.) before"
 	puts stderr "you gracefully quit the application.\n"
 	
-	lappend exe_args "strace" "-f" "-o" "$tracelog.tmp" "-qq" "-e" "trace=open,execve" "-v"
+	lappend exe_args "strace" "-f" "-o" "$tracelog.tmp" "-qq" "-e" "trace=open,execve,ioctl" "-v"
 	lappend exe_args $exep
 	for {set i 3} {$i < [llength $argv]} {incr i} {
 		lappend exe_args [lindex $argv $i]
@@ -329,7 +329,14 @@ if {$subcmd == "trace" } {
 	# append output of recent trace to the whole trace file
 	exec cat "$tracelog.tmp" >>$tracelog 2>@stderr
 	file delete "$tracelog.tmp"
-
+	
+	# a list of ioctl() commands known to be supported by "unionfs -o fake_devices" -
+	# will warn user if other ones are used.
+	array set ioctl_warnlist {
+		TCGETS 1
+		TCSETS 1
+	}
+	
 	set in [open $tracelog "r"]
 	while {![eof $in]} {
 		set l [gets $in]
@@ -343,7 +350,19 @@ if {$subcmd == "trace" } {
 
 
 			if {![regexp {[0-9]+ *execve\(\"([^"]+)\", [^)]*} $l range fname]} {
-				puts stderr "ignoring unparsesable strace output line: $l"
+			
+				if {![regexp {[0-9]+ *ioctl\([0-9]+, ([^,]+),} $l range ioctl]} {
+					puts stderr "ignoring unparsesable strace output line: $l"
+					continue
+				}
+				# traced an ioctl - let's find out whether it is
+				# one supported by "unionfs -o fake_devices":
+				if {![info exists ioctl_warnlist($ioctl)]} {
+					set ioctl_warnlist($ioctl) 1
+					puts stderr "\nCAVE: The program traced uses an ioctl() command '$ioctl'"
+					puts stderr "that is not a \"known to be supported by unionfs\" one."
+					puts stderr "This may or may not be affecting application execution.\n"
+				}
 				continue
 			}
 			# execve does not return - let's pretend it does succeed:

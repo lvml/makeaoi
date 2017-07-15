@@ -6,7 +6,7 @@
 makeaoi is meant to address the following use case:
 
 * You want to run Linux application X on a system B, where it is not yet available. But X runs fine on some Linux system A. 
-* Systems A and B do not run identical operating system distribtions or versions thereof.
+* Systems A and B do not run identical operating system distributions or versions thereof.
 * Compilation or installation of application X on system B would be cumbersome if not impossible - for example, because system B is lacking a lot of pre-requisites, or because you only have non-root access to system B.
 
 makeaoi can be run as an unprivileged user on system A, it will find all the relevant files required to run one or multiple executables there by tracing them, then it will prepare a directory that contains all these files plus a script to mount this directory as an "overlay" to the "/" filesystem (using unionfs-fuse, which does not require root privileges), and thus you should be able to start application X on any system B by invoking the created start script.
