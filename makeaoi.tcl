@@ -335,6 +335,8 @@ if {$subcmd == "trace" } {
 	array set ioctl_warnlist {
 		TCGETS 1
 		TCSETS 1
+		"SNDCTL_TMR_TIMEBASE or SNDRV_TIMER_IOCTL_NEXT_DEVICE or TCGETS" 1
+		"SNDCTL_TMR_START or SNDRV_TIMER_IOCTL_TREAD or TCSETS" 1
 	}
 	
 	set in [open $tracelog "r"]
