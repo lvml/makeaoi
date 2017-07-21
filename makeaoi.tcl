@@ -170,13 +170,16 @@ set filters(exclude) {
 		{^/home/}
 		{^/home$}
 		{^/etc/}
+		{^/etc$}
 		{^/var/}
 		{^/dev/}
+		{^/dev$}
 		{^/proc/}
 		{^/sys/}
 		{^/run/}
 		{^/tmp/}
 		{^/tmp$}
+		{^/usr/bin$}
 }
 set filters(nodirectories) {
 		{^/usr/share/fonts}
@@ -337,6 +340,18 @@ if {$subcmd == "trace" } {
 		TCSETS 1
 		"SNDCTL_TMR_TIMEBASE or SNDRV_TIMER_IOCTL_NEXT_DEVICE or TCGETS" 1
 		"SNDCTL_TMR_START or SNDRV_TIMER_IOCTL_TREAD or TCSETS" 1
+		SIOCGIFHWADDR 1
+		FIONREAD 1
+		TIOCMBIS 1
+		TIOCMBIC 1
+		TCFLSH 1
+		TCSBRK 1
+		TIOCGSERIAL 1
+		TIOCSSERIAL 1
+		TIOCOUTQ 1
+		TIOCMGET 1
+		TIOCEXCL 1
+		TIOCNXCL 1
 	}
 	
 	set in [open $tracelog "r"]
@@ -353,7 +368,7 @@ if {$subcmd == "trace" } {
 
 			if {![regexp {[0-9]+ *execve\(\"([^"]+)\", [^)]*} $l range fname]} {
 			
-				if {![regexp {[0-9]+ *ioctl\([0-9]+, ([^,]+),} $l range ioctl]} {
+				if {![regexp {[0-9]+ *ioctl\([0-9]+, ([^,)]+)} $l range ioctl]} {
 					puts stderr "ignoring unparsesable strace output line: $l"
 					continue
 				}
@@ -548,7 +563,7 @@ QLAApmmapn9zUWO57l09VwAAAABJRU5ErkJggg==}
 	
 	puts stderr "You can also use other tools to turn the directory into a self-contained"
 	puts stderr " executable, such as 'AppImage', which you could create this way:"
-	puts stderr " cd [file dirname $aoidir] ; appimagetool --comp xz --no-appstream [file tail $aoidir]"
+	puts stderr " cd [file dirname $aoidir] ; appimagetool --no-appstream [file tail $aoidir]"
 	
 	puts stderr ""
 	exit 0
