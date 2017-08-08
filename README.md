@@ -119,7 +119,7 @@ makeaoi automatically creates the minimum set of files required in such a direct
 So for above example, you could run
 
     cd /tmp/
-    appimagetool --comp xz --no-appstream sample
+    appimagetool --no-appstream sample
 
 and then transfer/invoke the resulting AppImage file on system B.
 
