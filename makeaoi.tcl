@@ -192,7 +192,7 @@ set filters(generalizers) {
 		{/usr/share/themes/.+/.}
 }
 
-proc add_nonignored_entry { fname } {
+proc add_nonignored_entry { fname fail_if_ignored } {
 	global filehash
 	global files
 	global filters	
@@ -211,6 +211,15 @@ proc add_nonignored_entry { fname } {
 	foreach re $filters(exclude) {
 		if {[regexp $re $fnorm]} {
 			# puts stderr "ignoring due to exclude filter '$re': $fnorm"
+			if {$fail_if_ignored} {
+				puts stderr "\nAn exclusion filter pattern '$re' is preventing file '$fnorm'"
+				puts stderr "from being included into the makeaoi directory - but this file"
+				puts stderr "is directly used when invoking the executable you asked to trace."
+				puts stderr "Either change the exclusion filters in the makeaoi script - look"
+				puts stderr "for the lines following 'set filters(exclude) \{' - or install your"
+				puts stderr "executable in a directory that is not by default excluded."
+				exit 20
+			}
 			return
 		}
 	}
@@ -230,7 +239,7 @@ proc add_nonignored_entry { fname } {
 	}
 }
 
-proc add_file_or_links { fname } {
+proc add_file_or_links { fname {fail_if_ignored 0} } {
 	
 	while {1} {
 		
@@ -244,11 +253,11 @@ proc add_file_or_links { fname } {
 				continue
 			}
 			if {$ft == "link"} {
-				add_nonignored_entry $fsd
+				add_nonignored_entry $fsd $fail_if_ignored
 			}
 		}
 		
-		add_nonignored_entry $fname
+		add_nonignored_entry $fname $fail_if_ignored
 		
 		if {[file type $fname] != "link"} {
 			break;
@@ -272,7 +281,7 @@ if {$subcmd == "trace" } {
 	
 	# add the supplied executable to files.txt 
 	set exep [exec which $exe 2>@stderr]
-	add_file_or_links $exep
+	add_file_or_links $exep 1
 
 	# create a link from the executable name to the "AppRun" script,
 	# such that users can call multiple executables via this "AppRun" script
@@ -300,7 +309,7 @@ if {$subcmd == "trace" } {
 	# Add ELF- or script interpreter, if any, and add this to files.txt
 	set interp [get_interpreter $exep]
 	if {$interp != ""} {
-		add_file_or_links $interp
+		add_file_or_links $interp 1
 	}
 
 	set exe_args {}
@@ -382,13 +391,19 @@ if {$subcmd == "trace" } {
 				}
 				continue
 			}
-			# execve does not return - let's pretend it does succeed:
-			set result 0
 			
-			# Also add ELF- or script interpreter, to files.txt
-			set interp [get_interpreter $fname]
-			if {$interp != ""} {
-				add_file_or_links $interp
+			if {[file executable $fname]} {
+				# execve does not return - let's pretend it does succeed:
+				set result 0
+			
+				# Also add ELF- or script interpreter, to files.txt
+				set interp [get_interpreter $fname]
+				if {$interp != ""} {
+					add_file_or_links $interp
+				}
+			} else {
+				# if $fname is not an executable file, we assume it could not be executed...
+				set result -1
 			}
 		} 
 
