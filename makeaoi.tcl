@@ -325,7 +325,7 @@ if {$subcmd == "trace" } {
 	puts stderr "go through all relevant workflows (menus, dialogs etc.) before"
 	puts stderr "you gracefully quit the application.\n"
 	
-	lappend exe_args "strace" "-f" "-o" "$tracelog.tmp" "-qq" "-e" "trace=open,execve,ioctl" "-v"
+	lappend exe_args "strace" "-f" "-o" "$tracelog.tmp" "-qq" "-e" "trace=open,openat,execve,ioctl" "-v"
 	lappend exe_args $exep
 	for {set i 3} {$i < [llength $argv]} {incr i} {
 		lappend exe_args [lindex $argv $i]
@@ -370,17 +370,37 @@ if {$subcmd == "trace" } {
 			# ignore blank lines
 			continue
 		}
-
-		if {![regexp {[0-9]+ *open\(\"([^"]+)\", [^)]*\) *= ([^ ]+)} $l range fname result]} {
-			# " - this comment is just to make syntax-highlighting happy 
-
-
-			if {![regexp {[0-9]+ *execve\(\"([^"]+)\", [^)]*} $l range fname]} {
-			
-				if {![regexp {[0-9]+ *ioctl\([0-9]+, ([^,)]+)} $l range ioctl]} {
-					puts stderr "ignoring unparsesable strace output line: $l"
-					continue
+		
+		set fname ""
+		set result 0
+		switch -regexp -matchvar mvar -- $l {
+			{[0-9]+ *open\(\"([^"]+)\", [^)]*\) *= ([^ ]+)} {
+				set fname  [lindex $mvar 1]
+				set result [lindex $mvar 2]
+			}			
+			{[0-9]+ *openat\(AT_FDCWD, \"([^"]+)\", [^)]*\) *= ([^ ]+)} {
+				set fname  [lindex $mvar 1]
+				set result [lindex $mvar 2]
+			}
+			{[0-9]+ *execve\(\"([^"]+)\", [^)]*} {
+				set fname  [lindex $mvar 1]
+				if {[file executable $fname]} {
+					# execve does not return - let's pretend it does succeed:
+					set result 0
+				
+					# Also add ELF- or script interpreter, to files.txt
+					set interp [get_interpreter $fname]
+					if {$interp != ""} {
+						add_file_or_links $interp
+					}
+				} else {
+					# if $fname is not an executable file, we assume it could not be executed...
+					set result -1
 				}
+			}
+			{[0-9]+ *ioctl\([0-9]+, ([^,)]+)} {
+				set ioctl [lindex $mvar 1]
+				
 				# traced an ioctl - let's find out whether it is
 				# one supported by "unionfs -o fake_devices":
 				if {![info exists ioctl_warnlist($ioctl)]} {
@@ -391,22 +411,13 @@ if {$subcmd == "trace" } {
 				}
 				continue
 			}
-			
-			if {[file executable $fname]} {
-				# execve does not return - let's pretend it does succeed:
-				set result 0
-			
-				# Also add ELF- or script interpreter, to files.txt
-				set interp [get_interpreter $fname]
-				if {$interp != ""} {
-					add_file_or_links $interp
-				}
-			} else {
-				# if $fname is not an executable file, we assume it could not be executed...
-				set result -1
+			default {
+				puts stderr "ignoring unparsesable strace output line: $l"
+				continue
 			}
+			
 		} 
-
+		
 		if {$result < 0} {
 			# ignore files that could not be opened
 			continue
